@@ -17,6 +17,10 @@ inputs:
     description: 'Salesforce username to run queries as (e.g. from secrets.SF_USERNAME).'
     required: true
 
+branding:
+  icon: 'search'
+  color: 'blue'
+
 runs:
   using: 'composite'
   steps:
