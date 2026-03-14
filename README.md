@@ -34,10 +34,44 @@ Add the following to your workflow and supply `SFDX_AUTH_URL` and `SF_USERNAME` 
 | `json-per-object` | One `<EntityDefinitionId>.json` file per Salesforce object under `output_dir`. |
 | `csv-per-object` | One `<EntityDefinitionId>.csv` file per Salesforce object under `output_dir`. |
 
-## Example workflows
+## Example workflow
 
-Ready-to-use example workflows are provided in [`.github/workflows/`](.github/workflows/).  
-Copy them to the `.github/workflows/` directory of the repository where you want to run the fetch and configure the secrets.
+Add the following workflow to `.github/workflows/` in the repository where you want to run the fetch.  
+Configure `SFDX_AUTH_URL` and `SF_USERNAME` as repository secrets.
+
+```yaml
+name: Fetch FieldDefinition (JSON)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 3 * * 0'
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch FieldDefinitions (JSON)
+        uses: kotaoue/salesforce-field-inspector@main
+        with:
+          format: json
+          output_dir: docs
+          sfdx_auth_url: ${{ secrets.SFDX_AUTH_URL }}
+          sf_username: ${{ secrets.SF_USERNAME }}
+
+      - name: Commit and push results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/field-definitions.json
+          git diff --cached --quiet || git commit -m "chore: update field-definitions.json [skip ci]"
+          git push
+```
 
 ## Secrets required
 
