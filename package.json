@@ -4,6 +4,7 @@
   "description": "GitHub Actions to fetch field definitions from Salesforce",
   "type": "module",
   "scripts": {
+    "test": "vitest run",
     "fetch-field-definitions:json": "node scripts/fetch-field-definitions.js json",
     "fetch-field-definitions:csv": "node scripts/fetch-field-definitions.js csv",
     "fetch-field-definitions:json-per-object": "node scripts/fetch-field-definitions.js json-per-object",
@@ -16,6 +17,7 @@
     "node": ">=18"
   },
   "devDependencies": {
-    "@salesforce/cli": "^2.126.4"
+    "@salesforce/cli": "^2.126.4",
+    "vitest": "^4.1.0"
   }
 }
