@@ -1,5 +1,9 @@
 # salesforce-field-inspector
 
+[![Test](https://github.com/kotaoue/salesforce-field-inspector/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/kotaoue/salesforce-field-inspector/actions/workflows/test.yml)
+[![codecov](https://codecov.io/gh/kotaoue/salesforce-field-inspector/branch/main/graph/badge.svg)](https://codecov.io/gh/kotaoue/salesforce-field-inspector)
+[![License](https://img.shields.io/github/license/kotaoue/salesforce-field-inspector)](https://github.com/kotaoue/salesforce-field-inspector/blob/main/LICENSE)
+
 A reusable GitHub Action that fetches [FieldDefinition](https://developer.salesforce.com/docs/atlas.en-us.api_tooling.meta/api_tooling/tooling_api_objects_fielddefinition.htm) records from the Salesforce Tooling API and saves them to JSON or CSV files.
 
 ## Usage
