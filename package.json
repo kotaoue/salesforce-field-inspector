@@ -1,0 +1,21 @@
+{
+  "name": "salesforce-field-inspector",
+  "version": "1.0.0",
+  "description": "GitHub Actions to fetch field definitions from Salesforce",
+  "type": "module",
+  "scripts": {
+    "fetch-field-definitions:json": "node scripts/fetch-field-definitions.js json",
+    "fetch-field-definitions:csv": "node scripts/fetch-field-definitions.js csv",
+    "fetch-field-definitions:json-per-object": "node scripts/fetch-field-definitions.js json-per-object",
+    "fetch-field-definitions:csv-per-object": "node scripts/fetch-field-definitions.js csv-per-object"
+  },
+  "dependencies": {
+    "@salesforce/core": "^8.27.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@salesforce/cli": "^2.126.4"
+  }
+}
