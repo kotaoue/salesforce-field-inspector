@@ -1,0 +1,46 @@
+name: 'Fetch Salesforce Field Definitions'
+description: 'Fetch FieldDefinition records from Salesforce Tooling API and save them to a file or directory.'
+
+inputs:
+  format:
+    description: 'Output format. One of: json, csv, json-per-object, csv-per-object.'
+    required: true
+    default: 'json'
+  output_dir:
+    description: 'Directory to write output files into. Defaults to docs/ relative to the caller workspace.'
+    required: false
+    default: 'docs'
+  sfdx_auth_url:
+    description: 'SFDX Auth URL used to authenticate to Salesforce (e.g. from secrets.SFDX_AUTH_URL).'
+    required: true
+  sf_username:
+    description: 'Salesforce username to run queries as (e.g. from secrets.SF_USERNAME).'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: '${{ github.action_path }}/package-lock.json'
+
+    - name: Install dependencies
+      shell: bash
+      run: npm ci
+      working-directory: ${{ github.action_path }}
+
+    - name: Authenticate to Salesforce
+      shell: bash
+      env:
+        SFDX_AUTH_URL: ${{ inputs.sfdx_auth_url }}
+      run: echo "$SFDX_AUTH_URL" | npx sf org login sfdx-url --sfdx-url-file /dev/stdin --set-default
+      working-directory: ${{ github.action_path }}
+
+    - name: Fetch FieldDefinitions
+      shell: bash
+      env:
+        SF_USERNAME: ${{ inputs.sf_username }}
+        OUTPUT_DIR: ${{ github.workspace }}/${{ inputs.output_dir }}
+      run: node ${{ github.action_path }}/scripts/fetch-field-definitions.js ${{ inputs.format }}
