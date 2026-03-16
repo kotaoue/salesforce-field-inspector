@@ -12,7 +12,7 @@ Add the following to your workflow and supply `SFDX_AUTH_URL` and `SF_USERNAME` 
 
 ```yaml
 - name: Fetch FieldDefinitions
-  uses: kotaoue/salesforce-field-inspector@main
+  uses: kotaoue/salesforce-field-inspector@v1
   with:
     format: json           # json | csv | json-per-object | csv-per-object
     output_dir: docs       # directory relative to the caller's workspace (default: docs)
@@ -61,7 +61,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Fetch FieldDefinitions (JSON)
-        uses: kotaoue/salesforce-field-inspector@main
+        uses: kotaoue/salesforce-field-inspector@v1
         with:
           format: json
           output_dir: docs
