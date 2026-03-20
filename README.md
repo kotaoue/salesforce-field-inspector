@@ -23,7 +23,7 @@ Add the following to your workflow and supply `SFDX_AUTH_URL` and `SF_USERNAME` 
 ### Inputs
 
 | Name | Required | Default | Description |
-|------|----------|---------|-------------|
+| ---- | -------- | ------- | ----------- |
 | `format` | Yes | `json` | Output format: `json`, `csv`, `json-per-object`, or `csv-per-object`. |
 | `output_dir` | No | `docs` | Directory (relative to the caller's workspace) where output files are written. |
 | `sfdx_auth_url` | Yes | — | SFDX Auth URL for authenticating to Salesforce. |
@@ -32,7 +32,7 @@ Add the following to your workflow and supply `SFDX_AUTH_URL` and `SF_USERNAME` 
 ### Output formats
 
 | Format | Description |
-|--------|-------------|
+| ------ | ----------- |
 | `json` | All records in a single `field-definitions.json` file. |
 | `csv` | All records in a single `field-definitions.csv` file. |
 | `json-per-object` | One `<EntityDefinitionId>.json` file per Salesforce object under `output_dir`. |
@@ -80,7 +80,6 @@ jobs:
 ## Secrets required
 
 | Secret | Description |
-|--------|-------------|
+| ------ | ----------- |
 | `SFDX_AUTH_URL` | SFDX Auth URL obtained from `sf org display --verbose --json`. |
 | `SF_USERNAME` | Salesforce username associated with the authenticated org. |
-
