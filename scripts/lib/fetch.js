@@ -76,9 +76,9 @@ async function fetchFieldDefinitionBatch(connection, entityIds) {
       // and advise reducing BATCH_SIZE.
       console.warn(
         `Warning: reached the SOQL OFFSET limit (${MAX_OFFSET}) while fetching` +
-          ` FieldDefinition records for a batch of ${entityIds.length} entity IDs` +
-          ` (current BATCH_SIZE: ${entityIds.length}).` +
-          ` Some records may have been omitted.  Reduce BATCH_SIZE to retrieve all records.`
+        ` FieldDefinition records for a batch of ${entityIds.length} entity IDs` +
+        ` (current BATCH_SIZE: ${entityIds.length}).` +
+        ` Some records may have been omitted.  Reduce BATCH_SIZE to retrieve all records.`
       );
       break;
     }
