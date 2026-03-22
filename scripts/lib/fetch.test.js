@@ -189,3 +189,41 @@ describe('isValidDurableId (via fetchFieldDefinitions)', () => {
     expect(result.records).toEqual([]);
   });
 });
+
+describe('object scope filtering', () => {
+  it('keeps only system objects when scope is system', async () => {
+    const entityRecords = [{ DurableId: 'Account' }, { DurableId: 'MyObject__c' }];
+    const systemField = { Id: 'aaa000', EntityDefinitionId: 'Account' };
+
+    const mockConn = buildMockConnection(entityRecords, [systemField]);
+    AuthInfo.create.mockResolvedValue({});
+    Connection.create.mockResolvedValue(mockConn);
+
+    await fetchFieldDefinitions('user@example.com', 'system');
+
+    const fieldQuery = mockConn.tooling.query.mock.calls[1][0];
+    expect(fieldQuery).toContain("'Account'");
+    expect(fieldQuery).not.toContain('MyObject__c');
+  });
+
+  it('keeps only custom objects when scope is custom', async () => {
+    const entityRecords = [{ DurableId: 'Account' }, { DurableId: 'MyObject__c' }];
+    const customField = { Id: 'bbb111', EntityDefinitionId: 'MyObject__c' };
+
+    const mockConn = buildMockConnection(entityRecords, [customField]);
+    AuthInfo.create.mockResolvedValue({});
+    Connection.create.mockResolvedValue(mockConn);
+
+    await fetchFieldDefinitions('user@example.com', 'custom');
+
+    const fieldQuery = mockConn.tooling.query.mock.calls[1][0];
+    expect(fieldQuery).toContain('MyObject__c');
+    expect(fieldQuery).not.toContain("'Account'");
+  });
+
+  it('throws an error for unsupported object scope', async () => {
+    await expect(fetchFieldDefinitions('user@example.com', 'unsupported'))
+      .rejects
+      .toThrow('Invalid object scope: unsupported. Use one of: all, system, custom.');
+  });
+});

@@ -6,6 +6,7 @@ import { saveResults, saveResultsAsCsv, saveResultsPerObject, saveResultsAsCsvPe
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const format = process.argv[2];
+const objectScope = process.argv[3] ?? 'all';
 
 const username = process.env.SF_USERNAME;
 if (!username) {
@@ -13,7 +14,7 @@ if (!username) {
   process.exit(1);
 }
 
-const data = await fetchFieldDefinitions(username).catch((err) => {
+const data = await fetchFieldDefinitions(username, objectScope).catch((err) => {
   console.error(err);
   process.exit(1);
 });
