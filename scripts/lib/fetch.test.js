@@ -60,6 +60,11 @@ describe('fetchFieldDefinitions', () => {
 
     expect(result.instanceUrl).toBe('https://example.my.salesforce.com');
     expect(result.records).toEqual(fieldRecords);
+
+    const fieldQuery = mockConn.tooling.query.mock.calls[1][0];
+    expect(fieldQuery).toContain(
+      'SELECT Id, DurableId, QualifiedApiName, EntityDefinitionId, NamespacePrefix, DeveloperName, MasterLabel, Label, DataType, IsCalculated, IsNillable, IsIndexed, IsApiFilterable, IsApiGroupable, IsApiSortable'
+    );
   });
 
   it('calls AuthInfo.create and Connection.create with the given username', async () => {
@@ -127,6 +132,47 @@ describe('fetchFieldDefinitions', () => {
     expect(result.records).toHaveLength(2);
     expect(result.records).toContainEqual(accountField);
     expect(result.records).toContainEqual(contactField);
+  });
+
+  it('uses only requested select fields when field list is provided', async () => {
+    const entityRecords = [{ DurableId: 'Account' }];
+    const fieldRecords = [{ Id: 'aaa000', EntityDefinitionId: 'Account' }];
+
+    const mockConn = buildMockConnection(entityRecords, fieldRecords);
+    AuthInfo.create.mockResolvedValue({});
+    Connection.create.mockResolvedValue(mockConn);
+
+    await fetchFieldDefinitions('user@example.com', 'all', ['Id', 'EntityDefinitionId']);
+
+    const fieldQuery = mockConn.tooling.query.mock.calls[1][0];
+    expect(fieldQuery).toContain('SELECT Id, EntityDefinitionId FROM FieldDefinition');
+    expect(fieldQuery).not.toContain('QualifiedApiName');
+  });
+
+  it('throws when requested fields include unsupported names', async () => {
+    await expect(fetchFieldDefinitions('user@example.com', 'all', ['Id', 'UnknownField']))
+      .rejects
+      .toThrow('Unsupported field name: UnknownField.');
+  });
+
+  it('throws when requested fields include invalid characters', async () => {
+    await expect(fetchFieldDefinitions('user@example.com', 'all', ['Id', 'Name, DurableId']))
+      .rejects
+      .toThrow('Invalid field name: Name, DurableId.');
+  });
+
+  it('deduplicates requested fields while preserving order', async () => {
+    const entityRecords = [{ DurableId: 'Account' }];
+    const fieldRecords = [{ Id: 'aaa000', EntityDefinitionId: 'Account' }];
+
+    const mockConn = buildMockConnection(entityRecords, fieldRecords);
+    AuthInfo.create.mockResolvedValue({});
+    Connection.create.mockResolvedValue(mockConn);
+
+    await fetchFieldDefinitions('user@example.com', 'all', ['Id', 'Id', 'EntityDefinitionId']);
+
+    const fieldQuery = mockConn.tooling.query.mock.calls[1][0];
+    expect(fieldQuery).toContain('SELECT Id, EntityDefinitionId FROM FieldDefinition');
   });
 
   it('follows queryMore for EntityDefinition pagination', async () => {

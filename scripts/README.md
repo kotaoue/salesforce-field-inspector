@@ -21,6 +21,10 @@ sf org login web --alias my-org
 sf org list --all
 
 export SF_USERNAME="your.username@example.com"
+
+# Optional: comma-separated FieldDefinition fields to select.
+# If omitted, all supported fields are selected.
+export FIELD_DEFINITION_FIELDS="Id,DurableId,QualifiedApiName,EntityDefinitionId"
 ```
 
 ## Run Scripts Locally

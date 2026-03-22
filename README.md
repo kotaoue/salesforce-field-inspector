@@ -17,6 +17,7 @@ Add the following to your workflow and supply `SFDX_AUTH_URL` and `SF_USERNAME` 
     format: json           # json | csv | json-per-object | csv-per-object
     output_dir: docs       # directory relative to the caller's workspace (default: docs)
     object_scope: all      # all | system | custom
+    field_definition_fields: Id,DurableId,QualifiedApiName,EntityDefinitionId
     sfdx_auth_url: ${{ secrets.SFDX_AUTH_URL }}
     sf_username: ${{ secrets.SF_USERNAME }}
 ```
@@ -28,6 +29,7 @@ Add the following to your workflow and supply `SFDX_AUTH_URL` and `SF_USERNAME` 
 | `format` | Yes | `json` | Output format: `json`, `csv`, `json-per-object`, or `csv-per-object`. |
 | `output_dir` | No | `docs` | Directory (relative to the caller's workspace) where output files are written. |
 | `object_scope` | No | `all` | Object filter: `all`, `system` (standard objects only), or `custom` (objects whose API name contains `__`). |
+| `field_definition_fields` | No | empty (all supported fields) | Comma-separated FieldDefinition fields to select. Supported fields: `Id`, `DurableId`, `QualifiedApiName`, `EntityDefinitionId`, `NamespacePrefix`, `DeveloperName`, `MasterLabel`, `Label`, `DataType`, `IsCalculated`, `IsNillable`, `IsIndexed`, `IsApiFilterable`, `IsApiGroupable`, `IsApiSortable`. |
 | `sfdx_auth_url` | Yes | — | SFDX Auth URL for authenticating to Salesforce. |
 | `sf_username` | Yes | — | Salesforce username to query as. |
 
@@ -68,6 +70,8 @@ jobs:
           format: json
           output_dir: docs
           object_scope: all
+          # Optional: narrow selected FieldDefinition columns
+          field_definition_fields: Id,DurableId,QualifiedApiName,EntityDefinitionId
           sfdx_auth_url: ${{ secrets.SFDX_AUTH_URL }}
           sf_username: ${{ secrets.SF_USERNAME }}
 

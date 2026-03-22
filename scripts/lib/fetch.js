@@ -2,6 +2,25 @@ import { AuthInfo, Connection } from '@salesforce/core';
 
 const ENTITY_ID_PATTERN = /^[A-Za-z0-9_]+$/;
 const OBJECT_SCOPE_VALUES = new Set(['all', 'system', 'custom']);
+const FIELD_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/;
+const ALLOWED_FIELD_DEFINITION_FIELDS = [
+  'Id',
+  'DurableId',
+  'QualifiedApiName',
+  'EntityDefinitionId',
+  'NamespacePrefix',
+  'DeveloperName',
+  'MasterLabel',
+  'Label',
+  'DataType',
+  'IsCalculated',
+  'IsNillable',
+  'IsIndexed',
+  'IsApiFilterable',
+  'IsApiGroupable',
+  'IsApiSortable',
+];
+const ALLOWED_FIELD_DEFINITION_FIELD_SET = new Set(ALLOWED_FIELD_DEFINITION_FIELDS);
 // Query one entity at a time so each batch stays well within the 2000-record
 // SOQL OFFSET ceiling.  Salesforce limits a single object to ~800 custom fields,
 // meaning one entity's fields always fit in a single LIMIT 2000 page.
@@ -45,6 +64,43 @@ function matchesObjectScope(durableId, objectScope) {
 }
 
 /**
+ * Validate and normalize requested FieldDefinition select fields.
+ * @param {string[] | undefined} fields
+ * @returns {string[]}
+ */
+function normalizeFieldDefinitionFields(fields) {
+  if (fields == null) {
+    return ALLOWED_FIELD_DEFINITION_FIELDS;
+  }
+
+  if (!Array.isArray(fields)) {
+    throw new Error('fieldDefinitionFields must be an array of field names.');
+  }
+
+  const normalized = fields
+    .map((field) => (typeof field === 'string' ? field.trim() : field))
+    .filter((field) => field !== '');
+
+  if (normalized.length === 0) {
+    throw new Error('fieldDefinitionFields must include at least one field.');
+  }
+
+  for (const field of normalized) {
+    if (typeof field !== 'string' || !FIELD_NAME_PATTERN.test(field)) {
+      throw new Error(`Invalid field name: ${String(field)}.`);
+    }
+    if (!ALLOWED_FIELD_DEFINITION_FIELD_SET.has(field)) {
+      throw new Error(
+        `Unsupported field name: ${field}. Allowed fields: ${ALLOWED_FIELD_DEFINITION_FIELDS.join(', ')}.`
+      );
+    }
+  }
+
+  // Deduplicate while preserving order.
+  return [...new Set(normalized)];
+}
+
+/**
  * Query all EntityDefinition DurableIds from the Tooling API.
  * @param {Connection} connection - Salesforce connection
  * @param {'all' | 'system' | 'custom'} objectScope - Object filter scope
@@ -82,16 +138,18 @@ async function fetchEntityDefinitionIds(connection, objectScope) {
  * remain in place as a safety net for any unexpected edge case.
  * @param {Connection} connection - Salesforce connection
  * @param {string[]} entityIds - Array of validated EntityDefinition DurableId values
+ * @param {string[]} fieldDefinitionFields - Validated FieldDefinition select fields
  * @returns {object[]} - Array of FieldDefinition records
  */
-async function fetchFieldDefinitionBatch(connection, entityIds) {
+async function fetchFieldDefinitionBatch(connection, entityIds, fieldDefinitionFields) {
   const inList = entityIds.map((id) => `'${id}'`).join(', ');
+  const selectClause = fieldDefinitionFields.join(', ');
   let records = [];
   let offset = 0;
 
   while (true) {
     const soql =
-      `SELECT Id, DurableId, QualifiedApiName, EntityDefinitionId, NamespacePrefix, DeveloperName, MasterLabel, Label, DataType, IsCalculated, IsNillable, IsIndexed, IsApiFilterable, IsApiGroupable, IsApiSortable` +
+      `SELECT ${selectClause}` +
       ` FROM FieldDefinition WHERE EntityDefinitionId IN (${inList})` +
       ` ORDER BY EntityDefinitionId, DurableId LIMIT ${PAGE_SIZE} OFFSET ${offset}`;
     const result = await connection.tooling.query(soql);
@@ -124,14 +182,16 @@ async function fetchFieldDefinitionBatch(connection, entityIds) {
  * Query all FieldDefinition records from the Tooling API.
  * @param {string} username - Salesforce username to authenticate as
  * @param {'all' | 'system' | 'custom'} [objectScope='all'] - Object filter scope
+ * @param {string[]} [fieldDefinitionFields] - FieldDefinition select fields
  * @returns {{ instanceUrl: string, records: object[] }}
  */
-export async function fetchFieldDefinitions(username, objectScope = 'all') {
+export async function fetchFieldDefinitions(username, objectScope = 'all', fieldDefinitionFields) {
   if (!OBJECT_SCOPE_VALUES.has(objectScope)) {
     throw new Error(
       `Invalid object scope: ${objectScope}. Use one of: all, system, custom.`
     );
   }
+  const selectFields = normalizeFieldDefinitionFields(fieldDefinitionFields);
 
   const authInfo = await AuthInfo.create({ username });
   const connection = await Connection.create({ authInfo });
@@ -150,7 +210,7 @@ export async function fetchFieldDefinitions(username, objectScope = 'all') {
   let records = [];
   for (let i = 0; i < validEntityIds.length; i += BATCH_SIZE) {
     const batch = validEntityIds.slice(i, i + BATCH_SIZE);
-    const batchRecords = await fetchFieldDefinitionBatch(connection, batch);
+    const batchRecords = await fetchFieldDefinitionBatch(connection, batch, selectFields);
     records = records.concat(batchRecords);
     const processed = Math.min(i + BATCH_SIZE, validEntityIds.length);
     console.log(`Fetching FieldDefinitions: ${processed}/${validEntityIds.length} entities processed (${records.length} records so far)`);

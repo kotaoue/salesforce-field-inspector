@@ -14,6 +14,10 @@ inputs:
     description: "Object scope filter. One of: all, system, custom."
     required: false
     default: "all"
+  field_definition_fields:
+    description: "Comma-separated FieldDefinition fields to select. Defaults to all supported fields."
+    required: false
+    default: ""
   sfdx_auth_url:
     description: "SFDX Auth URL used to authenticate to Salesforce (e.g. from secrets.SFDX_AUTH_URL)."
     required: true
@@ -49,4 +53,5 @@ runs:
       env:
         SF_USERNAME: ${{ inputs.sf_username }}
         OUTPUT_DIR: ${{ github.workspace }}/${{ inputs.output_dir }}
+        FIELD_DEFINITION_FIELDS: ${{ inputs.field_definition_fields }}
       run: node ${{ github.action_path }}/scripts/fetch-field-definitions.js ${{ inputs.format }} ${{ inputs.object_scope }}
