@@ -1,32 +1,36 @@
-name: 'Fetch Salesforce Field Definitions'
-description: 'Fetch FieldDefinition records from Salesforce Tooling API and save them to a file or directory.'
+name: "Fetch Salesforce Field Definitions"
+description: "Fetch FieldDefinition records from Salesforce Tooling API and save them to a file or directory."
 
 inputs:
   format:
-    description: 'Output format. One of: json, csv, json-per-object, csv-per-object.'
+    description: "Output format. One of: json, csv, json-per-object, csv-per-object."
     required: true
-    default: 'json'
+    default: "json"
   output_dir:
-    description: 'Directory to write output files into. Defaults to docs/ relative to the caller workspace.'
+    description: "Directory to write output files into. Defaults to docs/ relative to the caller workspace."
     required: false
-    default: 'docs'
+    default: "docs"
+  object_scope:
+    description: "Object scope filter. One of: all, system, custom."
+    required: false
+    default: "all"
   sfdx_auth_url:
-    description: 'SFDX Auth URL used to authenticate to Salesforce (e.g. from secrets.SFDX_AUTH_URL).'
+    description: "SFDX Auth URL used to authenticate to Salesforce (e.g. from secrets.SFDX_AUTH_URL)."
     required: true
   sf_username:
-    description: 'Salesforce username to run queries as (e.g. from secrets.SF_USERNAME).'
+    description: "Salesforce username to run queries as (e.g. from secrets.SF_USERNAME)."
     required: true
 
 branding:
-  icon: 'search'
-  color: 'blue'
+  icon: "search"
+  color: "blue"
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
     - uses: actions/setup-node@v4
       with:
-        node-version: '20'
+        node-version: "20"
 
     - name: Install dependencies
       shell: bash
@@ -45,4 +49,4 @@ runs:
       env:
         SF_USERNAME: ${{ inputs.sf_username }}
         OUTPUT_DIR: ${{ github.workspace }}/${{ inputs.output_dir }}
-      run: node ${{ github.action_path }}/scripts/fetch-field-definitions.js ${{ inputs.format }}
+      run: node ${{ github.action_path }}/scripts/fetch-field-definitions.js ${{ inputs.format }} ${{ inputs.object_scope }}

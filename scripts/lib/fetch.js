@@ -1,6 +1,7 @@
 import { AuthInfo, Connection } from '@salesforce/core';
 
 const ENTITY_ID_PATTERN = /^[A-Za-z0-9_]+$/;
+const OBJECT_SCOPE_VALUES = new Set(['all', 'system', 'custom']);
 // Query one entity at a time so each batch stays well within the 2000-record
 // SOQL OFFSET ceiling.  Salesforce limits a single object to ~800 custom fields,
 // meaning one entity's fields always fit in a single LIMIT 2000 page.
@@ -19,23 +20,53 @@ function isValidDurableId(id) {
 }
 
 /**
+ * Determine whether an object DurableId should be treated as custom.
+ * Custom Salesforce objects use double underscore naming (for example: __c, __mdt, __e).
+ * @param {string} durableId
+ * @returns {boolean}
+ */
+function isCustomObjectDurableId(durableId) {
+  return typeof durableId === 'string' && durableId.includes('__');
+}
+
+/**
+ * Return true when an object ID matches the requested scope.
+ * @param {string} durableId
+ * @param {'all' | 'system' | 'custom'} objectScope
+ * @returns {boolean}
+ */
+function matchesObjectScope(durableId, objectScope) {
+  if (objectScope === 'all') {
+    return true;
+  }
+
+  const isCustom = isCustomObjectDurableId(durableId);
+  return objectScope === 'custom' ? isCustom : !isCustom;
+}
+
+/**
  * Query all EntityDefinition DurableIds from the Tooling API.
  * @param {Connection} connection - Salesforce connection
+ * @param {'all' | 'system' | 'custom'} objectScope - Object filter scope
  * @returns {string[]} - Array of DurableId values
  */
-async function fetchEntityDefinitionIds(connection) {
+async function fetchEntityDefinitionIds(connection, objectScope) {
   let ids = [];
   let result = await connection.tooling.query(
     'SELECT DurableId FROM EntityDefinition ORDER BY DurableId LIMIT 2000'
   );
   for (const record of result.records) {
-    ids.push(record.DurableId);
+    if (matchesObjectScope(record.DurableId, objectScope)) {
+      ids.push(record.DurableId);
+    }
   }
 
   while (!result.done && result.nextRecordsUrl) {
     result = await connection.tooling.queryMore(result.nextRecordsUrl);
     for (const record of result.records) {
-      ids.push(record.DurableId);
+      if (matchesObjectScope(record.DurableId, objectScope)) {
+        ids.push(record.DurableId);
+      }
     }
   }
 
@@ -92,15 +123,23 @@ async function fetchFieldDefinitionBatch(connection, entityIds) {
 /**
  * Query all FieldDefinition records from the Tooling API.
  * @param {string} username - Salesforce username to authenticate as
+ * @param {'all' | 'system' | 'custom'} [objectScope='all'] - Object filter scope
  * @returns {{ instanceUrl: string, records: object[] }}
  */
-export async function fetchFieldDefinitions(username) {
+export async function fetchFieldDefinitions(username, objectScope = 'all') {
+  if (!OBJECT_SCOPE_VALUES.has(objectScope)) {
+    throw new Error(
+      `Invalid object scope: ${objectScope}. Use one of: all, system, custom.`
+    );
+  }
+
   const authInfo = await AuthInfo.create({ username });
   const connection = await Connection.create({ authInfo });
 
   console.log(`Connected to: ${connection.instanceUrl}`);
+  console.log(`Object scope: ${objectScope}`);
 
-  const allEntityIds = await fetchEntityDefinitionIds(connection);
+  const allEntityIds = await fetchEntityDefinitionIds(connection, objectScope);
   const invalidEntityIds = allEntityIds.filter((id) => !isValidDurableId(id));
   if (invalidEntityIds.length > 0) {
     console.warn(`Skipping ${invalidEntityIds.length} EntityDefinition record(s) with invalid DurableId.`);

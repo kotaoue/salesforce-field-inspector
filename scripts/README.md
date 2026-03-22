@@ -37,6 +37,11 @@ npm run fetch-field-definitions:json
 npm run fetch-field-definitions:csv
 npm run fetch-field-definitions:json-per-object
 npm run fetch-field-definitions:csv-per-object
+
+# Optional: pass object scope with npm run
+# all (default) | system | custom
+npm run fetch-field-definitions:json -- system
+npm run fetch-field-definitions:json -- custom
 ```
 
 ## Tests
