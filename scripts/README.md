@@ -8,7 +8,7 @@ This document captures practical tips for running and debugging the scripts loca
 # Node.js 18+
 # Salesforce CLI (`sf`) available in your environment
 # A Salesforce org authenticated locally
-# Install dependencies from the repository root:
+# Run from the repository root and install dependencies:
 
 npm install
 
@@ -32,6 +32,7 @@ export SF_USERNAME="your.username@example.com"
 # You can override it with:
 export OUTPUT_DIR="./tmp/field-definitions"
 
+# Run from the repository root:
 npm run fetch-field-definitions:json
 npm run fetch-field-definitions:csv
 npm run fetch-field-definitions:json-per-object
