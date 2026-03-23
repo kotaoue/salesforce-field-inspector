@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fetchFieldDefinitions } from './fetch.js';
+import { fetchFieldDefinitions, parseDuration } from './fetch.js';
 
 // Mock @salesforce/core so no real Salesforce connection is made.
 vi.mock('@salesforce/core', () => {
@@ -271,5 +271,158 @@ describe('object scope filtering', () => {
     await expect(fetchFieldDefinitions('user@example.com', 'unsupported'))
       .rejects
       .toThrow('Invalid object scope: unsupported. Use one of: all, system, custom.');
+  });
+});
+
+describe('parseDuration', () => {
+  it('parses "2days" as 2 × 24 hours in ms', () => {
+    expect(parseDuration('2days')).toBe(2 * 24 * 60 * 60 * 1000);
+  });
+
+  it('parses "1day" (singular)', () => {
+    expect(parseDuration('1day')).toBe(24 * 60 * 60 * 1000);
+  });
+
+  it('parses "d" shorthand', () => {
+    expect(parseDuration('3d')).toBe(3 * 24 * 60 * 60 * 1000);
+  });
+
+  it('parses "12hours"', () => {
+    expect(parseDuration('12hours')).toBe(12 * 60 * 60 * 1000);
+  });
+
+  it('parses "1hour" (singular)', () => {
+    expect(parseDuration('1hour')).toBe(60 * 60 * 1000);
+  });
+
+  it('parses "h" shorthand', () => {
+    expect(parseDuration('6h')).toBe(6 * 60 * 60 * 1000);
+  });
+
+  it('parses "30min"', () => {
+    expect(parseDuration('30min')).toBe(30 * 60 * 1000);
+  });
+
+  it('parses "30mins"', () => {
+    expect(parseDuration('30mins')).toBe(30 * 60 * 1000);
+  });
+
+  it('parses "1minute" (singular)', () => {
+    expect(parseDuration('1minute')).toBe(60 * 1000);
+  });
+
+  it('parses "60minutes"', () => {
+    expect(parseDuration('60minutes')).toBe(60 * 60 * 1000);
+  });
+
+  it('parses "1week"', () => {
+    expect(parseDuration('1week')).toBe(7 * 24 * 60 * 60 * 1000);
+  });
+
+  it('parses "2weeks" (plural)', () => {
+    expect(parseDuration('2weeks')).toBe(2 * 7 * 24 * 60 * 60 * 1000);
+  });
+
+  it('parses "w" shorthand', () => {
+    expect(parseDuration('1w')).toBe(7 * 24 * 60 * 60 * 1000);
+  });
+
+  it('is case-insensitive', () => {
+    expect(parseDuration('2DAYS')).toBe(2 * 24 * 60 * 60 * 1000);
+    expect(parseDuration('6H')).toBe(6 * 60 * 60 * 1000);
+  });
+
+  it('trims surrounding whitespace', () => {
+    expect(parseDuration('  2days  ')).toBe(2 * 24 * 60 * 60 * 1000);
+  });
+
+  it('throws for an empty string', () => {
+    expect(() => parseDuration('')).toThrow('Invalid duration');
+  });
+
+  it('throws for an invalid format', () => {
+    expect(() => parseDuration('abc')).toThrow('Invalid duration');
+  });
+
+  it('throws for missing unit', () => {
+    expect(() => parseDuration('42')).toThrow('Invalid duration');
+  });
+
+  it('throws for unknown unit', () => {
+    expect(() => parseDuration('2years')).toThrow('Invalid duration');
+  });
+});
+
+describe('updatedWithin filtering', () => {
+  it('adds a LastModifiedDate WHERE clause when updatedWithin is provided', async () => {
+    const entityRecords = [{ DurableId: 'Account' }];
+    const fieldRecords = [{ Id: 'aaa000', EntityDefinitionId: 'Account' }];
+
+    const mockConn = buildMockConnection(entityRecords, fieldRecords);
+    AuthInfo.create.mockResolvedValue({});
+    Connection.create.mockResolvedValue(mockConn);
+
+    await fetchFieldDefinitions('user@example.com', 'all', undefined, '2days');
+
+    const entityQuery = mockConn.tooling.query.mock.calls[0][0];
+    expect(entityQuery).toContain('WHERE LastModifiedDate >=');
+  });
+
+  it('does not add a WHERE clause when updatedWithin is undefined', async () => {
+    const entityRecords = [{ DurableId: 'Account' }];
+    const fieldRecords = [{ Id: 'aaa000', EntityDefinitionId: 'Account' }];
+
+    const mockConn = buildMockConnection(entityRecords, fieldRecords);
+    AuthInfo.create.mockResolvedValue({});
+    Connection.create.mockResolvedValue(mockConn);
+
+    await fetchFieldDefinitions('user@example.com');
+
+    const entityQuery = mockConn.tooling.query.mock.calls[0][0];
+    expect(entityQuery).not.toContain('WHERE');
+  });
+
+  it('does not add a WHERE clause when updatedWithin is an empty string', async () => {
+    const entityRecords = [{ DurableId: 'Account' }];
+    const fieldRecords = [{ Id: 'aaa000', EntityDefinitionId: 'Account' }];
+
+    const mockConn = buildMockConnection(entityRecords, fieldRecords);
+    AuthInfo.create.mockResolvedValue({});
+    Connection.create.mockResolvedValue(mockConn);
+
+    await fetchFieldDefinitions('user@example.com', 'all', undefined, '');
+
+    const entityQuery = mockConn.tooling.query.mock.calls[0][0];
+    expect(entityQuery).not.toContain('WHERE');
+  });
+
+  it('uses a datetime no more than the specified duration in the past', async () => {
+    const entityRecords = [{ DurableId: 'Account' }];
+    const fieldRecords = [{ Id: 'aaa000', EntityDefinitionId: 'Account' }];
+
+    const mockConn = buildMockConnection(entityRecords, fieldRecords);
+    AuthInfo.create.mockResolvedValue({});
+    Connection.create.mockResolvedValue(mockConn);
+
+    const TIMING_TOLERANCE_MS = 1000;
+    const before = Date.now();
+    await fetchFieldDefinitions('user@example.com', 'all', undefined, '24hours');
+    const after = Date.now();
+
+    const entityQuery = mockConn.tooling.query.mock.calls[0][0];
+    // Extract the datetime literal from the query
+    const match = entityQuery.match(/LastModifiedDate >= (\S+)/);
+    expect(match).not.toBeNull();
+    const queryDate = new Date(match[1]);
+    const expectedMs = 24 * 60 * 60 * 1000;
+    // The cutoff should be between (before - expectedMs) and (after - expectedMs)
+    expect(queryDate.getTime()).toBeGreaterThanOrEqual(before - expectedMs - TIMING_TOLERANCE_MS);
+    expect(queryDate.getTime()).toBeLessThanOrEqual(after - expectedMs + TIMING_TOLERANCE_MS);
+  });
+
+  it('throws when updatedWithin is an invalid duration', async () => {
+    await expect(fetchFieldDefinitions('user@example.com', 'all', undefined, 'invalid'))
+      .rejects
+      .toThrow('Invalid duration');
   });
 });
