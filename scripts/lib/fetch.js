@@ -2,6 +2,7 @@ import { AuthInfo, Connection } from '@salesforce/core';
 
 const ENTITY_ID_PATTERN = /^[A-Za-z0-9_]+$/;
 const OBJECT_SCOPE_VALUES = new Set(['all', 'system', 'custom']);
+const DURATION_PATTERN = /^(\d+)\s*(weeks?|w|days?|d|hours?|h|mins?|minutes?)$/i;
 const FIELD_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/;
 const ALLOWED_FIELD_DEFINITION_FIELDS = [
   'Id',
@@ -28,6 +29,44 @@ const BATCH_SIZE = 1;
 const PAGE_SIZE = 2000;
 // Salesforce SOQL OFFSET is capped at 2000 for FieldDefinition.
 const MAX_OFFSET = 2000;
+
+/**
+ * Parse a human-readable duration string into milliseconds.
+ * Accepted units: weeks (w), days (d), hours (h), minutes (min/mins/minute/minutes).
+ * Examples: "2days", "12hours", "30min", "1week".
+ * @param {string} durationStr
+ * @returns {number} Duration in milliseconds
+ */
+export function parseDuration(durationStr) {
+  const trimmed = String(durationStr).trim();
+  const match = trimmed.match(DURATION_PATTERN);
+  if (!match) {
+    throw new Error(
+      `Invalid duration: "${durationStr}". Use a format like "2days", "12hours", "30min", or "1week".`
+    );
+  }
+
+  const value = parseInt(match[1], 10);
+  const unit = match[2].toLowerCase();
+  const msPerMinute = 60 * 1000;
+  const msPerHour = 60 * msPerMinute;
+  const msPerDay = 24 * msPerHour;
+  const msPerWeek = 7 * msPerDay;
+
+  if (unit === 'w' || unit.startsWith('week')) return value * msPerWeek;
+  if (unit === 'd' || unit.startsWith('day')) return value * msPerDay;
+  if (unit === 'h' || unit.startsWith('hour')) return value * msPerHour;
+  return value * msPerMinute;
+}
+
+/**
+ * Convert a Date object to a Salesforce SOQL datetime literal (UTC).
+ * @param {Date} date
+ * @returns {string}
+ */
+function toSoqlDateTimeLiteral(date) {
+  return date.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
 
 /**
  * Validate a DurableId to prevent SOQL injection.
@@ -98,13 +137,25 @@ function normalizeFieldDefinitionFields(fields) {
  * Query EntityDefinition DurableIds from the Tooling API.
  * @param {Connection} connection - Salesforce connection
  * @param {'all' | 'system' | 'custom'} objectScope - Object filter scope
+ * @param {Date | null} [sinceDateTime] - When set, only entities modified at or after this date are returned
  * @returns {string[]} - Array of DurableId values
  */
-async function fetchEntityDefinitionIds(connection, objectScope) {
-  const whereClause = buildObjectScopeWhereClause(objectScope);
+async function fetchEntityDefinitionIds(connection, objectScope, sinceDateTime = null) {
+  const scopeWhere = buildObjectScopeWhereClause(objectScope);
+  let whereClause;
+  if (sinceDateTime instanceof Date) {
+    const dateCondition = `LastModifiedDate >= ${toSoqlDateTimeLiteral(sinceDateTime)}`;
+    if (scopeWhere) {
+      whereClause = ` ${scopeWhere} AND ${dateCondition}`;
+    } else {
+      whereClause = ` WHERE ${dateCondition}`;
+    }
+  } else {
+    whereClause = scopeWhere ? ` ${scopeWhere}` : '';
+  }
   let ids = [];
   let result = await connection.tooling.query(
-    `SELECT DurableId FROM EntityDefinition${whereClause ? ` ${whereClause}` : ''} ORDER BY DurableId LIMIT 2000`
+    `SELECT DurableId FROM EntityDefinition${whereClause} ORDER BY DurableId LIMIT 2000`
   );
   for (const record of result.records) {
     ids.push(record.DurableId);
@@ -174,9 +225,11 @@ async function fetchFieldDefinitionBatch(connection, entityIds, fieldDefinitionF
  * @param {string} username - Salesforce username to authenticate as
  * @param {'all' | 'system' | 'custom'} [objectScope='all'] - Object filter scope
  * @param {string[]} [fieldDefinitionFields] - FieldDefinition select fields
+ * @param {string | null | undefined} [updatedWithin] - Optional duration string (e.g. "2days", "12hours", "30min") to
+ *   restrict results to entities whose LastModifiedDate falls within the specified window.
  * @returns {{ instanceUrl: string, records: object[] }}
  */
-export async function fetchFieldDefinitions(username, objectScope = 'all', fieldDefinitionFields) {
+export async function fetchFieldDefinitions(username, objectScope = 'all', fieldDefinitionFields, updatedWithin) {
   if (!OBJECT_SCOPE_VALUES.has(objectScope)) {
     throw new Error(
       `Invalid object scope: ${objectScope}. Use one of: all, system, custom.`
@@ -184,13 +237,22 @@ export async function fetchFieldDefinitions(username, objectScope = 'all', field
   }
   const selectFields = normalizeFieldDefinitionFields(fieldDefinitionFields);
 
+  let sinceDateTime = null;
+  if (updatedWithin != null && updatedWithin !== '') {
+    const ms = parseDuration(updatedWithin);
+    sinceDateTime = new Date(Date.now() - ms);
+  }
+
   const authInfo = await AuthInfo.create({ username });
   const connection = await Connection.create({ authInfo });
 
   console.log(`Connected to: ${connection.instanceUrl}`);
   console.log(`Object scope: ${objectScope}`);
+  if (sinceDateTime) {
+    console.log(`Filtering objects modified since: ${sinceDateTime.toISOString()} (updatedWithin: ${updatedWithin})`);
+  }
 
-  const allEntityIds = await fetchEntityDefinitionIds(connection, objectScope);
+  const allEntityIds = await fetchEntityDefinitionIds(connection, objectScope, sinceDateTime);
   const invalidEntityIds = allEntityIds.filter((id) => !isValidDurableId(id));
   if (invalidEntityIds.length > 0) {
     console.warn(`Skipping ${invalidEntityIds.length} EntityDefinition record(s) with invalid DurableId.`);

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fetchFieldDefinitions } from './fetch.js';
+import { fetchFieldDefinitions, parseDuration } from './fetch.js';
 
 // Mock @salesforce/core so no real Salesforce connection is made.
 vi.mock('@salesforce/core', () => {
@@ -294,5 +294,119 @@ describe('object scope filtering', () => {
     await expect(fetchFieldDefinitions('user@example.com', 'unsupported'))
       .rejects
       .toThrow('Invalid object scope: unsupported. Use one of: all, system, custom.');
+  });
+});
+
+describe('parseDuration', () => {
+  it.each([
+    ['1week', 7 * 24 * 60 * 60 * 1000],
+    ['2weeks', 14 * 24 * 60 * 60 * 1000],
+    ['1w', 7 * 24 * 60 * 60 * 1000],
+    ['3days', 3 * 24 * 60 * 60 * 1000],
+    ['1day', 24 * 60 * 60 * 1000],
+    ['1d', 24 * 60 * 60 * 1000],
+    ['12hours', 12 * 60 * 60 * 1000],
+    ['1hour', 60 * 60 * 1000],
+    ['1h', 60 * 60 * 1000],
+    ['30min', 30 * 60 * 1000],
+    ['5mins', 5 * 60 * 1000],
+    ['1minute', 60 * 1000],
+    ['10minutes', 10 * 60 * 1000],
+    ['2DAYS', 2 * 24 * 60 * 60 * 1000],
+    ['6Hours', 6 * 60 * 60 * 1000],
+    ['2 days', 2 * 24 * 60 * 60 * 1000],
+  ])('parses "%s" into %d ms', (input, expected) => {
+    expect(parseDuration(input)).toBe(expected);
+  });
+
+  it.each([
+    [''],
+    ['2'],
+    ['days'],
+    ['1sec'],
+    ['-1days'],
+    ['1.5days'],
+  ])('throws for invalid input "%s"', (input) => {
+    expect(() => parseDuration(input)).toThrow('Invalid duration');
+  });
+});
+
+describe('updatedWithin filtering', () => {
+  it('adds a LastModifiedDate condition to the EntityDefinition query', async () => {
+    const entityRecords = [{ DurableId: 'Account' }];
+    const fieldRecords = [{ Id: 'aaa000', EntityDefinitionId: 'Account' }];
+
+    const mockConn = buildMockConnection(entityRecords, fieldRecords);
+    AuthInfo.create.mockResolvedValue({});
+    Connection.create.mockResolvedValue(mockConn);
+
+    await fetchFieldDefinitions('user@example.com', 'all', undefined, '24hours');
+
+    const entityQuery = mockConn.tooling.query.mock.calls[0][0];
+    expect(entityQuery).toContain('LastModifiedDate >=');
+    expect(entityQuery).toContain('WHERE');
+  });
+
+  it('uses a datetime no more than the specified duration in the past', async () => {
+    const entityRecords = [{ DurableId: 'Account' }];
+    const fieldRecords = [{ Id: 'aaa000', EntityDefinitionId: 'Account' }];
+
+    const mockConn = buildMockConnection(entityRecords, fieldRecords);
+    AuthInfo.create.mockResolvedValue({});
+    Connection.create.mockResolvedValue(mockConn);
+
+    const before = Date.now();
+    await fetchFieldDefinitions('user@example.com', 'all', undefined, '24hours');
+    const after = Date.now();
+
+    const entityQuery = mockConn.tooling.query.mock.calls[0][0];
+    const match = entityQuery.match(/LastModifiedDate >= (\S+)/);
+    expect(match).not.toBeNull();
+
+    const cutoff = new Date(match[1]).getTime();
+    const expectedMin = before - 24 * 60 * 60 * 1000 - 1000; // allow up to 1 s for ms truncation in SOQL literal
+    const expectedMax = after - 24 * 60 * 60 * 1000;
+    expect(cutoff).toBeGreaterThanOrEqual(expectedMin);
+    expect(cutoff).toBeLessThanOrEqual(expectedMax);
+  });
+
+  it('combines scope and date filters with AND', async () => {
+    const entityRecords = [{ DurableId: 'MyObject__c' }];
+    const fieldRecords = [{ Id: 'bbb111', EntityDefinitionId: 'MyObject__c' }];
+
+    const mockConn = buildMockConnection(entityRecords, fieldRecords);
+    AuthInfo.create.mockResolvedValue({});
+    Connection.create.mockResolvedValue(mockConn);
+
+    await fetchFieldDefinitions('user@example.com', 'custom', undefined, '2days');
+
+    const entityQuery = mockConn.tooling.query.mock.calls[0][0];
+    expect(entityQuery).toContain("DurableId LIKE '%\\_\\_%'");
+    expect(entityQuery).toContain('LastModifiedDate >=');
+    expect(entityQuery).toContain(' AND ');
+  });
+
+  it('omits LastModifiedDate filter when updatedWithin is not provided', async () => {
+    const entityRecords = [{ DurableId: 'Account' }];
+    const mockConn = buildMockConnection(entityRecords, []);
+    AuthInfo.create.mockResolvedValue({});
+    Connection.create.mockResolvedValue(mockConn);
+
+    await fetchFieldDefinitions('user@example.com', 'all');
+
+    const entityQuery = mockConn.tooling.query.mock.calls[0][0];
+    expect(entityQuery).not.toContain('LastModifiedDate');
+  });
+
+  it('omits LastModifiedDate filter when updatedWithin is an empty string', async () => {
+    const entityRecords = [{ DurableId: 'Account' }];
+    const mockConn = buildMockConnection(entityRecords, []);
+    AuthInfo.create.mockResolvedValue({});
+    Connection.create.mockResolvedValue(mockConn);
+
+    await fetchFieldDefinitions('user@example.com', 'all', undefined, '');
+
+    const entityQuery = mockConn.tooling.query.mock.calls[0][0];
+    expect(entityQuery).not.toContain('LastModifiedDate');
   });
 });
