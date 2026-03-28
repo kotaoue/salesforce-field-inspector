@@ -1,6 +1,8 @@
 {
-    "cSpell.words": [
+    "version": "0.2",
+    "words": [
         "Groupable",
+        "kota",
         "kotaoue",
         "Nillable",
         "SFDX",
