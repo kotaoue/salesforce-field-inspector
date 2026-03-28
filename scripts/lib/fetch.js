@@ -41,7 +41,8 @@ function isValidDurableId(id) {
 /**
  * Build a SOQL WHERE clause that filters EntityDefinition by object scope.
  * Custom Salesforce objects use double underscore naming (e.g., __c, __mdt, __e),
- * so DurableId LIKE '%\_\_%' matches custom objects and NOT LIKE excludes them.
+ * so DurableId LIKE '%\_\_%' matches custom objects and NOT (...LIKE...) excludes them.
+ * SOQL does not support NOT LIKE as a compound operator; use NOT (...) instead.
  * Returns an empty string for the 'all' scope (no filtering needed).
  * @param {'all' | 'system' | 'custom'} objectScope
  * @returns {string} - WHERE clause string (empty string for 'all')
@@ -51,7 +52,7 @@ function buildObjectScopeWhereClause(objectScope) {
     return "WHERE DurableId LIKE '%\\_\\_%'";
   }
   if (objectScope === 'system') {
-    return "WHERE DurableId NOT LIKE '%\\_\\_%'";
+    return "WHERE NOT (DurableId LIKE '%\\_\\_%')";
   }
   return '';
 }

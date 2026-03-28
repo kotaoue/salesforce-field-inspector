@@ -248,9 +248,9 @@ describe('object scope filtering', () => {
 
     await fetchFieldDefinitions('user@example.com', 'system');
 
-    // EntityDefinition query must use NOT LIKE to exclude custom objects.
+    // EntityDefinition query must use NOT (...LIKE...) to exclude custom objects.
     const entityQuery = mockConn.tooling.query.mock.calls[0][0];
-    expect(entityQuery).toContain("NOT LIKE '%\\_\\_%'");
+    expect(entityQuery).toContain("NOT (DurableId LIKE '%\\_\\_%')");
 
     const fieldQuery = mockConn.tooling.query.mock.calls[1][0];
     expect(fieldQuery).toContain("'Account'");
@@ -271,7 +271,7 @@ describe('object scope filtering', () => {
     // EntityDefinition query must use LIKE to include only custom objects.
     const entityQuery = mockConn.tooling.query.mock.calls[0][0];
     expect(entityQuery).toContain("LIKE '%\\_\\_%'");
-    expect(entityQuery).not.toContain('NOT LIKE');
+    expect(entityQuery).not.toContain('NOT (');
 
     const fieldQuery = mockConn.tooling.query.mock.calls[1][0];
     expect(fieldQuery).toContain('MyObject__c');
