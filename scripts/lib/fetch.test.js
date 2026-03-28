@@ -238,7 +238,8 @@ describe('isValidDurableId (via fetchFieldDefinitions)', () => {
 
 describe('object scope filtering', () => {
   it('keeps only system objects when scope is system', async () => {
-    const entityRecords = [{ DurableId: 'Account' }, { DurableId: 'MyObject__c' }];
+    // The WHERE clause filters at the SOQL level; mock returns only system objects.
+    const entityRecords = [{ DurableId: 'Account' }];
     const systemField = { Id: 'aaa000', EntityDefinitionId: 'Account' };
 
     const mockConn = buildMockConnection(entityRecords, [systemField]);
@@ -247,13 +248,18 @@ describe('object scope filtering', () => {
 
     await fetchFieldDefinitions('user@example.com', 'system');
 
+    // EntityDefinition query must use NOT (...LIKE...) to exclude custom objects.
+    const entityQuery = mockConn.tooling.query.mock.calls[0][0];
+    expect(entityQuery).toContain("NOT (DurableId LIKE '%\\_\\_%')");
+
     const fieldQuery = mockConn.tooling.query.mock.calls[1][0];
     expect(fieldQuery).toContain("'Account'");
     expect(fieldQuery).not.toContain('MyObject__c');
   });
 
   it('keeps only custom objects when scope is custom', async () => {
-    const entityRecords = [{ DurableId: 'Account' }, { DurableId: 'MyObject__c' }];
+    // The WHERE clause filters at the SOQL level; mock returns only custom objects.
+    const entityRecords = [{ DurableId: 'MyObject__c' }];
     const customField = { Id: 'bbb111', EntityDefinitionId: 'MyObject__c' };
 
     const mockConn = buildMockConnection(entityRecords, [customField]);
@@ -262,9 +268,26 @@ describe('object scope filtering', () => {
 
     await fetchFieldDefinitions('user@example.com', 'custom');
 
+    // EntityDefinition query must use LIKE to include only custom objects.
+    const entityQuery = mockConn.tooling.query.mock.calls[0][0];
+    expect(entityQuery).toContain("LIKE '%\\_\\_%'");
+    expect(entityQuery).not.toContain('NOT (');
+
     const fieldQuery = mockConn.tooling.query.mock.calls[1][0];
     expect(fieldQuery).toContain('MyObject__c');
-    expect(fieldQuery).not.toContain("'Account'");
+  });
+
+  it('does not add a WHERE clause to the EntityDefinition query when scope is all', async () => {
+    const entityRecords = [{ DurableId: 'Account' }];
+    const mockConn = buildMockConnection(entityRecords, []);
+    AuthInfo.create.mockResolvedValue({});
+    Connection.create.mockResolvedValue(mockConn);
+
+    await fetchFieldDefinitions('user@example.com', 'all');
+
+    const entityQuery = mockConn.tooling.query.mock.calls[0][0];
+    expect(entityQuery).not.toContain('LIKE');
+    expect(entityQuery).not.toContain('WHERE');
   });
 
   it('throws an error for unsupported object scope', async () => {

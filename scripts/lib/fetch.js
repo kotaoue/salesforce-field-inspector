@@ -78,31 +78,6 @@ function isValidDurableId(id) {
 }
 
 /**
- * Determine whether an object DurableId should be treated as custom.
- * Custom Salesforce objects use double underscore naming (for example: __c, __mdt, __e).
- * @param {string} durableId
- * @returns {boolean}
- */
-function isCustomObjectDurableId(durableId) {
-  return typeof durableId === 'string' && durableId.includes('__');
-}
-
-/**
- * Return true when an object ID matches the requested scope.
- * @param {string} durableId
- * @param {'all' | 'system' | 'custom'} objectScope
- * @returns {boolean}
- */
-function matchesObjectScope(durableId, objectScope) {
-  if (objectScope === 'all') {
-    return true;
-  }
-
-  const isCustom = isCustomObjectDurableId(durableId);
-  return objectScope === 'custom' ? isCustom : !isCustom;
-}
-
-/**
  * Validate and normalize requested FieldDefinition select fields.
  * @param {string[] | undefined} fields
  * @returns {string[]}
@@ -140,7 +115,7 @@ function normalizeFieldDefinitionFields(fields) {
 }
 
 /**
- * Query all EntityDefinition DurableIds from the Tooling API.
+ * Query EntityDefinition DurableIds from the Tooling API.
  * @param {Connection} connection - Salesforce connection
  * @param {'all' | 'system' | 'custom'} objectScope - Object filter scope
  * @param {Date | null} [sinceDateTime] - When set, only entities modified at or after this date are returned
@@ -148,6 +123,11 @@ function normalizeFieldDefinitionFields(fields) {
  */
 async function fetchEntityDefinitionIds(connection, objectScope, sinceDateTime = null) {
   const whereClauses = [];
+  if (objectScope === 'custom') {
+    whereClauses.push("DurableId LIKE '%\\_\\_%'");
+  } else if (objectScope === 'system') {
+    whereClauses.push("NOT (DurableId LIKE '%\\_\\_%')");
+  }
   if (sinceDateTime instanceof Date) {
     whereClauses.push(`LastModifiedDate >= ${toSoqlDateTimeLiteral(sinceDateTime)}`);
   }
@@ -158,17 +138,13 @@ async function fetchEntityDefinitionIds(connection, objectScope, sinceDateTime =
     `SELECT DurableId FROM EntityDefinition${whereClause} ORDER BY DurableId LIMIT 2000`
   );
   for (const record of result.records) {
-    if (matchesObjectScope(record.DurableId, objectScope)) {
-      ids.push(record.DurableId);
-    }
+    ids.push(record.DurableId);
   }
 
   while (!result.done && result.nextRecordsUrl) {
     result = await connection.tooling.queryMore(result.nextRecordsUrl);
     for (const record of result.records) {
-      if (matchesObjectScope(record.DurableId, objectScope)) {
-        ids.push(record.DurableId);
-      }
+      ids.push(record.DurableId);
     }
   }
 
