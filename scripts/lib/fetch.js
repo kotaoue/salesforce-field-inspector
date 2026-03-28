@@ -39,28 +39,21 @@ function isValidDurableId(id) {
 }
 
 /**
- * Determine whether an object DurableId should be treated as custom.
- * Custom Salesforce objects use double underscore naming (for example: __c, __mdt, __e).
- * @param {string} durableId
- * @returns {boolean}
- */
-function isCustomObjectDurableId(durableId) {
-  return typeof durableId === 'string' && durableId.includes('__');
-}
-
-/**
- * Return true when an object ID matches the requested scope.
- * @param {string} durableId
+ * Build a SOQL WHERE clause that filters EntityDefinition by object scope.
+ * Custom Salesforce objects use double underscore naming (e.g., __c, __mdt, __e),
+ * so DurableId LIKE '%\_\_%' matches custom objects and NOT LIKE excludes them.
+ * Returns an empty string for the 'all' scope (no filtering needed).
  * @param {'all' | 'system' | 'custom'} objectScope
- * @returns {boolean}
+ * @returns {string} - WHERE clause string (empty string for 'all')
  */
-function matchesObjectScope(durableId, objectScope) {
-  if (objectScope === 'all') {
-    return true;
+function buildObjectScopeWhereClause(objectScope) {
+  if (objectScope === 'custom') {
+    return "WHERE DurableId LIKE '%\\_\\_%'";
   }
-
-  const isCustom = isCustomObjectDurableId(durableId);
-  return objectScope === 'custom' ? isCustom : !isCustom;
+  if (objectScope === 'system') {
+    return "WHERE DurableId NOT LIKE '%\\_\\_%'";
+  }
+  return '';
 }
 
 /**
@@ -101,28 +94,25 @@ function normalizeFieldDefinitionFields(fields) {
 }
 
 /**
- * Query all EntityDefinition DurableIds from the Tooling API.
+ * Query EntityDefinition DurableIds from the Tooling API.
  * @param {Connection} connection - Salesforce connection
  * @param {'all' | 'system' | 'custom'} objectScope - Object filter scope
  * @returns {string[]} - Array of DurableId values
  */
 async function fetchEntityDefinitionIds(connection, objectScope) {
+  const whereClause = buildObjectScopeWhereClause(objectScope);
   let ids = [];
   let result = await connection.tooling.query(
-    'SELECT DurableId FROM EntityDefinition ORDER BY DurableId LIMIT 2000'
+    `SELECT DurableId FROM EntityDefinition${whereClause ? ` ${whereClause}` : ''} ORDER BY DurableId LIMIT 2000`
   );
   for (const record of result.records) {
-    if (matchesObjectScope(record.DurableId, objectScope)) {
-      ids.push(record.DurableId);
-    }
+    ids.push(record.DurableId);
   }
 
   while (!result.done && result.nextRecordsUrl) {
     result = await connection.tooling.queryMore(result.nextRecordsUrl);
     for (const record of result.records) {
-      if (matchesObjectScope(record.DurableId, objectScope)) {
-        ids.push(record.DurableId);
-      }
+      ids.push(record.DurableId);
     }
   }
 
