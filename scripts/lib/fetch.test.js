@@ -364,7 +364,7 @@ describe('updatedWithin filtering', () => {
     expect(match).not.toBeNull();
 
     const cutoff = new Date(match[1]).getTime();
-    const expectedMin = before - 24 * 60 * 60 * 1000 - 1000; // allow up to 1 s for ms truncation in SOQL literal
+    const expectedMin = before - 24 * 60 * 60 * 1000 - 1000; // allow up to 1 s because toSoqlDateTimeLiteral truncates ms to second precision
     const expectedMax = after - 24 * 60 * 60 * 1000;
     expect(cutoff).toBeGreaterThanOrEqual(expectedMin);
     expect(cutoff).toBeLessThanOrEqual(expectedMax);
