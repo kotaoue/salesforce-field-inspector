@@ -78,22 +78,23 @@ function isValidDurableId(id) {
 }
 
 /**
- * Build a SOQL WHERE clause that filters EntityDefinition by object scope.
- * Custom Salesforce objects use double underscore naming (e.g., __c, __mdt, __e),
- * so DurableId LIKE '%\_\_%' matches custom objects and NOT (...LIKE...) excludes them.
- * SOQL does not support NOT LIKE as a compound operator; use NOT (...) instead.
- * Returns an empty string for the 'all' scope (no filtering needed).
+ * Build a SOQL WHERE clause for EntityDefinition queries, combining object scope
+ * and optional date filter conditions.
  * @param {'all' | 'system' | 'custom'} objectScope
- * @returns {string} - WHERE clause string (empty string for 'all')
+ * @param {Date | null} sinceDateTime - When set, adds a LastModifiedDate >= condition
+ * @returns {string} - WHERE clause string including leading space, or empty string
  */
-function buildObjectScopeWhereClause(objectScope) {
+function buildEntityDefinitionWhereClause(objectScope, sinceDateTime) {
+  const conditions = [];
   if (objectScope === 'custom') {
-    return "WHERE DurableId LIKE '%\\_\\_%'";
+    conditions.push("DurableId LIKE '%\\_\\_%'");
+  } else if (objectScope === 'system') {
+    conditions.push("NOT (DurableId LIKE '%\\_\\_%')");
   }
-  if (objectScope === 'system') {
-    return "WHERE NOT (DurableId LIKE '%\\_\\_%')";
+  if (sinceDateTime instanceof Date) {
+    conditions.push(`LastModifiedDate >= ${toSoqlDateTimeLiteral(sinceDateTime)}`);
   }
-  return '';
+  return conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
 }
 
 /**
@@ -141,18 +142,7 @@ function normalizeFieldDefinitionFields(fields) {
  * @returns {string[]} - Array of DurableId values
  */
 async function fetchEntityDefinitionIds(connection, objectScope, sinceDateTime = null) {
-  const scopeWhere = buildObjectScopeWhereClause(objectScope);
-  let whereClause;
-  if (sinceDateTime instanceof Date) {
-    const dateCondition = `LastModifiedDate >= ${toSoqlDateTimeLiteral(sinceDateTime)}`;
-    if (scopeWhere) {
-      whereClause = ` ${scopeWhere} AND ${dateCondition}`;
-    } else {
-      whereClause = ` WHERE ${dateCondition}`;
-    }
-  } else {
-    whereClause = scopeWhere ? ` ${scopeWhere}` : '';
-  }
+  const whereClause = buildEntityDefinitionWhereClause(objectScope, sinceDateTime);
   let ids = [];
   let result = await connection.tooling.query(
     `SELECT DurableId FROM EntityDefinition${whereClause} ORDER BY DurableId LIMIT 2000`
