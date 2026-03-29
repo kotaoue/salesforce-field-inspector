@@ -10,6 +10,7 @@ const objectScope = process.argv[3] ?? 'all';
 const fieldDefinitionFields = process.env.FIELD_DEFINITION_FIELDS
   ? process.env.FIELD_DEFINITION_FIELDS.split(',').map((field) => field.trim()).filter(Boolean)
   : undefined;
+const updatedWithin = process.env.UPDATED_WITHIN || undefined;
 
 const username = process.env.SF_USERNAME;
 if (!username) {
@@ -17,7 +18,7 @@ if (!username) {
   process.exit(1);
 }
 
-const data = await fetchFieldDefinitions(username, objectScope, fieldDefinitionFields).catch((err) => {
+const data = await fetchFieldDefinitions(username, objectScope, fieldDefinitionFields, updatedWithin).catch((err) => {
   console.error(err);
   process.exit(1);
 });

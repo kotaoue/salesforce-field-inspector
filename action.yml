@@ -18,6 +18,10 @@ inputs:
     description: "Comma-separated FieldDefinition fields to select. Defaults to all supported fields."
     required: false
     default: ""
+  updated_within:
+    description: "Only fetch objects modified within this duration (e.g. '2days', '12hours', '30min', '1week'). Leave empty to fetch all objects."
+    required: false
+    default: ""
   sfdx_auth_url:
     description: "SFDX Auth URL used to authenticate to Salesforce (e.g. from secrets.SFDX_AUTH_URL)."
     required: true
@@ -54,4 +58,5 @@ runs:
         SF_USERNAME: ${{ inputs.sf_username }}
         OUTPUT_DIR: ${{ github.workspace }}/${{ inputs.output_dir }}
         FIELD_DEFINITION_FIELDS: ${{ inputs.field_definition_fields }}
+        UPDATED_WITHIN: ${{ inputs.updated_within }}
       run: node ${{ github.action_path }}/scripts/fetch-field-definitions.js ${{ inputs.format }} ${{ inputs.object_scope }}
