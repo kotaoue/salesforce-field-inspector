@@ -46,6 +46,15 @@ npm run fetch-field-definitions:csv-per-object
 # all (default) | system | custom
 npm run fetch-field-definitions:json -- system
 npm run fetch-field-definitions:json -- custom
+
+# Optional: filter objects by last modified date
+# Supported units: weeks (week/weeks/w), days (day/days/d),
+#                  hours (hour/hours/h), minutes (min/mins/minutes/m)
+export UPDATED_WITHIN="2days"
+npm run fetch-field-definitions:json
+
+# Combine object scope and date filter:
+UPDATED_WITHIN="12hours" npm run fetch-field-definitions:json -- custom
 ```
 
 ## Tests
