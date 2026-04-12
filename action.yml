@@ -3,7 +3,7 @@ description: "Fetch FieldDefinition records from Salesforce Tooling API and save
 
 inputs:
   format:
-    description: "Output format. One of: json, csv, json-per-object, csv-per-object."
+    description: "Output format. One of: json, csv, json-per-object, csv-per-object, package-xml."
     required: true
     default: "json"
   output_dir:
@@ -20,6 +20,10 @@ inputs:
     default: ""
   updated_within:
     description: "Only fetch objects modified within this duration (e.g. '2days', '12hours', '30min', '1week'). Leave empty to fetch all objects."
+    required: false
+    default: ""
+  metadata_api_version:
+    description: "Salesforce Metadata API version to declare in the generated package.xml (e.g. '62.0'). Only used when format is package-xml."
     required: false
     default: ""
   sfdx_auth_url:
@@ -59,4 +63,5 @@ runs:
         OUTPUT_DIR: ${{ github.workspace }}/${{ inputs.output_dir }}
         FIELD_DEFINITION_FIELDS: ${{ inputs.field_definition_fields }}
         UPDATED_WITHIN: ${{ inputs.updated_within }}
+        METADATA_API_VERSION: ${{ inputs.metadata_api_version }}
       run: node ${{ github.action_path }}/scripts/fetch-field-definitions.js ${{ inputs.format }} ${{ inputs.object_scope }}

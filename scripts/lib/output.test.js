@@ -2,7 +2,7 @@ import { readFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { saveResults, saveResultsAsCsv, saveResultsPerObject, saveResultsAsCsvPerObject } from './output.js';
+import { saveResults, saveResultsAsCsv, saveResultsPerObject, saveResultsAsCsvPerObject, saveAsPackageXml } from './output.js';
 
 const SAMPLE_RECORDS = [
   {
@@ -268,5 +268,151 @@ describe('saveResultsAsCsvPerObject', () => {
 
     const content = await readFile(resolve(tmpDir, 'Account.csv'), 'utf-8');
     expect(content).toContain('\r\n');
+  });
+});
+
+const CUSTOM_RECORDS = [
+  {
+    Id: 'ccc222',
+    DurableId: 'MyObject__c.MyField__c',
+    QualifiedApiName: 'MyField__c',
+    EntityDefinitionId: 'MyObject__c',
+    NamespacePrefix: null,
+    DeveloperName: 'MyField',
+    MasterLabel: 'My Field',
+    Label: 'My Field',
+    DataType: 'Text',
+    IsCalculated: false,
+    IsNillable: true,
+    IsIndexed: false,
+    IsApiFilterable: true,
+    IsApiGroupable: false,
+    IsApiSortable: true,
+  },
+  {
+    Id: 'ddd333',
+    DurableId: 'Account.CustomField__c',
+    QualifiedApiName: 'CustomField__c',
+    EntityDefinitionId: 'Account',
+    NamespacePrefix: null,
+    DeveloperName: 'CustomField',
+    MasterLabel: 'Custom Field',
+    Label: 'Custom Field',
+    DataType: 'Text',
+    IsCalculated: false,
+    IsNillable: true,
+    IsIndexed: false,
+    IsApiFilterable: true,
+    IsApiGroupable: false,
+    IsApiSortable: true,
+  },
+];
+
+describe('saveAsPackageXml', () => {
+  let tmpDir;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(resolve(tmpdir(), 'sfi-test-'));
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it('writes a valid package.xml with correct XML declaration and root element', async () => {
+    const outputFile = resolve(tmpDir, 'package.xml');
+    await saveAsPackageXml({ instanceUrl: 'https://example.my.salesforce.com', records: CUSTOM_RECORDS }, outputFile);
+
+    const content = await readFile(outputFile, 'utf-8');
+    expect(content).toContain('<?xml version="1.0" encoding="UTF-8"?>');
+    expect(content).toContain('<Package xmlns="http://soap.sforce.com/2006/04/metadata">');
+    expect(content).toContain('</Package>');
+  });
+
+  it('includes custom fields as CustomField members', async () => {
+    const outputFile = resolve(tmpDir, 'package.xml');
+    await saveAsPackageXml({ instanceUrl: 'https://example.my.salesforce.com', records: CUSTOM_RECORDS }, outputFile);
+
+    const content = await readFile(outputFile, 'utf-8');
+    expect(content).toContain('<members>MyObject__c.MyField__c</members>');
+    expect(content).toContain('<members>Account.CustomField__c</members>');
+    expect(content).toContain('<name>CustomField</name>');
+  });
+
+  it('includes custom objects as CustomObject members', async () => {
+    const outputFile = resolve(tmpDir, 'package.xml');
+    await saveAsPackageXml({ instanceUrl: 'https://example.my.salesforce.com', records: CUSTOM_RECORDS }, outputFile);
+
+    const content = await readFile(outputFile, 'utf-8');
+    expect(content).toContain('<members>MyObject__c</members>');
+    expect(content).toContain('<name>CustomObject</name>');
+  });
+
+  it('does not include standard fields or standard objects', async () => {
+    const outputFile = resolve(tmpDir, 'package.xml');
+    await saveAsPackageXml(SAMPLE_DATA, outputFile);
+
+    const content = await readFile(outputFile, 'utf-8');
+    // SAMPLE_DATA has no custom fields or custom objects
+    expect(content).not.toContain('<name>CustomField</name>');
+    expect(content).not.toContain('<name>CustomObject</name>');
+  });
+
+  it('uses the default API version when none is specified', async () => {
+    const outputFile = resolve(tmpDir, 'package.xml');
+    await saveAsPackageXml({ instanceUrl: 'https://example.my.salesforce.com', records: [] }, outputFile);
+
+    const content = await readFile(outputFile, 'utf-8');
+    expect(content).toContain('<version>62.0</version>');
+  });
+
+  it('uses a custom API version when provided', async () => {
+    const outputFile = resolve(tmpDir, 'package.xml');
+    await saveAsPackageXml({ instanceUrl: 'https://example.my.salesforce.com', records: [] }, outputFile, '59.0');
+
+    const content = await readFile(outputFile, 'utf-8');
+    expect(content).toContain('<version>59.0</version>');
+  });
+
+  it('sorts CustomField members alphabetically', async () => {
+    const outputFile = resolve(tmpDir, 'package.xml');
+    await saveAsPackageXml({ instanceUrl: 'https://example.my.salesforce.com', records: CUSTOM_RECORDS }, outputFile);
+
+    const content = await readFile(outputFile, 'utf-8');
+    const accountIdx = content.indexOf('Account.CustomField__c');
+    const myObjectIdx = content.indexOf('MyObject__c.MyField__c');
+    expect(accountIdx).toBeLessThan(myObjectIdx);
+  });
+
+  it('deduplicates CustomObject members', async () => {
+    const duplicateCustomObjectRecords = [
+      { ...CUSTOM_RECORDS[0] },
+      { ...CUSTOM_RECORDS[0], Id: 'eee444', QualifiedApiName: 'AnotherField__c', DurableId: 'MyObject__c.AnotherField__c' },
+    ];
+    const outputFile = resolve(tmpDir, 'package.xml');
+    await saveAsPackageXml({ instanceUrl: 'https://example.my.salesforce.com', records: duplicateCustomObjectRecords }, outputFile);
+
+    const content = await readFile(outputFile, 'utf-8');
+    const occurrences = (content.match(/<members>MyObject__c<\/members>/g) || []).length;
+    expect(occurrences).toBe(1);
+  });
+
+  it('creates intermediate directories as needed', async () => {
+    const outputFile = resolve(tmpDir, 'nested', 'dir', 'package.xml');
+    await saveAsPackageXml({ instanceUrl: 'https://example.my.salesforce.com', records: [] }, outputFile);
+
+    const content = await readFile(outputFile, 'utf-8');
+    expect(content).toContain('<Package');
+  });
+
+  it('writes a valid empty package.xml when there are no records', async () => {
+    const outputFile = resolve(tmpDir, 'package.xml');
+    await saveAsPackageXml({ instanceUrl: 'https://example.my.salesforce.com', records: [] }, outputFile);
+
+    const content = await readFile(outputFile, 'utf-8');
+    expect(content).toContain('<?xml version="1.0" encoding="UTF-8"?>');
+    expect(content).toContain('<version>62.0</version>');
+    expect(content).not.toContain('<name>CustomField</name>');
+    expect(content).not.toContain('<name>CustomObject</name>');
   });
 });
