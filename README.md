@@ -111,34 +111,6 @@ You can then use the Salesforce CLI to retrieve the actual metadata files:
   run: sf project retrieve start --manifest manifest/package.xml
 ```
 
-## Local verification
-
-You can run any fetch format locally by setting the required environment variables and using the npm scripts.
-
-```bash
-# Set required environment variables
-export SF_USERNAME="your-username@example.com"
-export OUTPUT_DIR="./docs"
-
-# Fetch in JSON format
-npm run fetch-field-definitions:json
-
-# Fetch in CSV format
-npm run fetch-field-definitions:csv
-
-# Generate a package.xml manifest (custom objects/fields only)
-npm run fetch-field-definitions:package-xml
-
-# Optional: narrow to custom objects only and set a Metadata API version
-OBJECT_SCOPE=custom METADATA_API_VERSION=62.0 npm run fetch-field-definitions:package-xml
-```
-
-After generating `package.xml`, retrieve the corresponding metadata with the Salesforce CLI:
-
-```bash
-sf project retrieve start --manifest docs/package.xml
-```
-
 ## Secrets required
 
 | Secret | Description |
