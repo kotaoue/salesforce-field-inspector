@@ -55,6 +55,18 @@ npm run fetch-field-definitions:json
 
 # Combine object scope and date filter:
 UPDATED_WITHIN="12hours" npm run fetch-field-definitions:json -- custom
+
+# Generate a package.xml manifest (custom objects/fields only)
+npm run fetch-field-definitions:package-xml
+
+# Optional: narrow to custom objects only and set a Metadata API version
+OBJECT_SCOPE=custom METADATA_API_VERSION=62.0 npm run fetch-field-definitions:package-xml
+```
+
+After generating `package.xml`, retrieve the corresponding metadata with the Salesforce CLI:
+
+```bash
+sf project retrieve start --manifest docs/package.xml
 ```
 
 ## Tests

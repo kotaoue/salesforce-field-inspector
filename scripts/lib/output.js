@@ -1,6 +1,8 @@
 import { writeFile, mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 
+const DEFAULT_METADATA_API_VERSION = '62.0';
+
 const CSV_FIELDS = [
   'Id',
   'DurableId',
@@ -133,4 +135,64 @@ export async function saveResultsAsCsvPerObject(data, outputDir) {
   }
 
   console.log(`Results saved to ${outputDir} (${byEntity.size} files)`);
+}
+
+/**
+ * Serialize FieldDefinition results to a Salesforce Metadata API package manifest (package.xml).
+ * Only custom fields (QualifiedApiName ending with "__c") are included as CustomField members.
+ * Custom objects (EntityDefinitionId ending with "__c") are included as CustomObject members.
+ * The resulting file can be used with `sf project retrieve start --manifest package.xml` to
+ * retrieve the corresponding metadata from Salesforce for use in development environments.
+ * @param {{ instanceUrl: string, records: object[] }} data
+ * @param {string} outputFile - Absolute path to the destination file (e.g. package.xml)
+ * @param {string} [apiVersion] - Salesforce API version to declare in the manifest
+ */
+export async function saveAsPackageXml(data, outputFile, apiVersion = DEFAULT_METADATA_API_VERSION) {
+  const customFieldMembers = [];
+  const customObjectIds = new Set();
+
+  for (const record of data.records) {
+    const fieldApiName = record.QualifiedApiName;
+    const objectApiName = record.EntityDefinitionId;
+
+    if (fieldApiName && fieldApiName.endsWith('__c')) {
+      customFieldMembers.push(`${objectApiName}.${fieldApiName}`);
+    }
+
+    if (objectApiName && objectApiName.endsWith('__c')) {
+      customObjectIds.add(objectApiName);
+    }
+  }
+
+  const lines = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<Package xmlns="http://soap.sforce.com/2006/04/metadata">',
+  ];
+
+  if (customFieldMembers.length > 0) {
+    lines.push('    <types>');
+    for (const member of customFieldMembers.sort()) {
+      lines.push(`        <members>${member}</members>`);
+    }
+    lines.push('        <name>CustomField</name>');
+    lines.push('    </types>');
+  }
+
+  if (customObjectIds.size > 0) {
+    lines.push('    <types>');
+    for (const objectId of [...customObjectIds].sort()) {
+      lines.push(`        <members>${objectId}</members>`);
+    }
+    lines.push('        <name>CustomObject</name>');
+    lines.push('    </types>');
+  }
+
+  lines.push(`    <version>${apiVersion}</version>`);
+  lines.push('</Package>');
+
+  const xml = lines.join('\n') + '\n';
+
+  await mkdir(dirname(outputFile), { recursive: true });
+  await writeFile(outputFile, xml, 'utf-8');
+  console.log(`Package manifest saved to ${outputFile}`);
 }
