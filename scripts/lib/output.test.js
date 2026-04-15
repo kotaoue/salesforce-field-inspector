@@ -2,7 +2,7 @@ import { readFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { saveResults, saveResultsAsCsv, saveResultsPerObject, saveResultsAsCsvPerObject, saveAsPackageXml } from './output.js';
+import { saveResults, saveResultsAsCsv, saveResultsPerObject, saveResultsAsCsvPerObject, saveAsPackageXml, saveEntityResults, saveEntityResultsAsCsv } from './output.js';
 
 const SAMPLE_RECORDS = [
   {
@@ -414,5 +414,145 @@ describe('saveAsPackageXml', () => {
     expect(content).toContain('<version>62.0</version>');
     expect(content).not.toContain('<name>CustomField</name>');
     expect(content).not.toContain('<name>CustomObject</name>');
+  });
+});
+
+const SAMPLE_ENTITY_RECORDS = [
+  {
+    DurableId: 'Account',
+    QualifiedApiName: 'Account',
+    Label: 'Account',
+    PluralLabel: 'Accounts',
+    Description: null,
+    DeveloperName: 'Account',
+    NamespacePrefix: null,
+  },
+  {
+    DurableId: 'MyObject__c',
+    QualifiedApiName: 'MyObject__c',
+    Label: 'My Object',
+    PluralLabel: 'My Objects',
+    Description: 'A custom object for testing',
+    DeveloperName: 'MyObject',
+    NamespacePrefix: null,
+  },
+];
+
+const SAMPLE_ENTITY_DATA = {
+  instanceUrl: 'https://example.my.salesforce.com',
+  records: SAMPLE_ENTITY_RECORDS,
+};
+
+const ENTITY_CSV_HEADER = 'DurableId,QualifiedApiName,Label,PluralLabel,Description,DeveloperName,NamespacePrefix';
+
+describe('saveEntityResults', () => {
+  let tmpDir;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(resolve(tmpdir(), 'sfi-test-'));
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it('writes a JSON file with correct structure', async () => {
+    const outputFile = resolve(tmpDir, 'entity-definitions.json');
+    await saveEntityResults(SAMPLE_ENTITY_DATA, outputFile);
+
+    const content = JSON.parse(await readFile(outputFile, 'utf-8'));
+    expect(content.instanceUrl).toBe(SAMPLE_ENTITY_DATA.instanceUrl);
+    expect(content.totalSize).toBe(SAMPLE_ENTITY_RECORDS.length);
+    expect(content.records).toEqual(SAMPLE_ENTITY_RECORDS);
+    expect(typeof content.fetchedAt).toBe('string');
+    expect(() => new Date(content.fetchedAt)).not.toThrow();
+  });
+
+  it('creates intermediate directories as needed', async () => {
+    const outputFile = resolve(tmpDir, 'nested', 'dir', 'entity-definitions.json');
+    await saveEntityResults(SAMPLE_ENTITY_DATA, outputFile);
+
+    const content = JSON.parse(await readFile(outputFile, 'utf-8'));
+    expect(content.totalSize).toBe(SAMPLE_ENTITY_RECORDS.length);
+  });
+
+  it('writes pretty-printed JSON', async () => {
+    const outputFile = resolve(tmpDir, 'entity-definitions.json');
+    await saveEntityResults(SAMPLE_ENTITY_DATA, outputFile);
+
+    const raw = await readFile(outputFile, 'utf-8');
+    expect(raw).toContain('\n');
+    expect(raw).toContain('  ');
+  });
+});
+
+describe('saveEntityResultsAsCsv', () => {
+  let tmpDir;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(resolve(tmpdir(), 'sfi-test-'));
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it('writes a CSV file with header and data rows', async () => {
+    const outputFile = resolve(tmpDir, 'entity-definitions.csv');
+    await saveEntityResultsAsCsv(SAMPLE_ENTITY_DATA, outputFile);
+
+    const content = await readFile(outputFile, 'utf-8');
+    const lines = content.split('\r\n');
+    expect(lines[0]).toBe(ENTITY_CSV_HEADER);
+    const HEADER_LINES = 1;
+    const TRAILING_EMPTY = 1;
+    expect(lines.length).toBe(HEADER_LINES + SAMPLE_ENTITY_RECORDS.length + TRAILING_EMPTY);
+  });
+
+  it('uses CRLF line endings', async () => {
+    const outputFile = resolve(tmpDir, 'entity-definitions.csv');
+    await saveEntityResultsAsCsv(SAMPLE_ENTITY_DATA, outputFile);
+
+    const content = await readFile(outputFile, 'utf-8');
+    expect(content).toContain('\r\n');
+  });
+
+  it('ends with a trailing CRLF', async () => {
+    const outputFile = resolve(tmpDir, 'entity-definitions.csv');
+    await saveEntityResultsAsCsv(SAMPLE_ENTITY_DATA, outputFile);
+
+    const content = await readFile(outputFile, 'utf-8');
+    expect(content.endsWith('\r\n')).toBe(true);
+  });
+
+  it('handles null Description by outputting empty string', async () => {
+    const outputFile = resolve(tmpDir, 'entity-definitions.csv');
+    await saveEntityResultsAsCsv(SAMPLE_ENTITY_DATA, outputFile);
+
+    const content = await readFile(outputFile, 'utf-8');
+    const rows = content.split('\r\n');
+    const descriptionIndex = ENTITY_CSV_HEADER.split(',').indexOf('Description');
+    const firstDataRow = rows[1].split(',');
+    expect(firstDataRow[descriptionIndex]).toBe('');
+  });
+
+  it('escapes Description values containing commas', async () => {
+    const data = {
+      instanceUrl: 'https://example.my.salesforce.com',
+      records: [{ ...SAMPLE_ENTITY_RECORDS[1], Description: 'Object, with comma' }],
+    };
+    const outputFile = resolve(tmpDir, 'entity-definitions.csv');
+    await saveEntityResultsAsCsv(data, outputFile);
+
+    const content = await readFile(outputFile, 'utf-8');
+    expect(content).toContain('"Object, with comma"');
+  });
+
+  it('creates intermediate directories as needed', async () => {
+    const outputFile = resolve(tmpDir, 'nested', 'entity-definitions.csv');
+    await saveEntityResultsAsCsv(SAMPLE_ENTITY_DATA, outputFile);
+
+    const content = await readFile(outputFile, 'utf-8');
+    expect(content).toContain(ENTITY_CSV_HEADER);
   });
 });

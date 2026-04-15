@@ -3,7 +3,7 @@ description: "Fetch FieldDefinition records from Salesforce Tooling API and save
 
 inputs:
   format:
-    description: "Output format. One of: json, csv, json-per-object, csv-per-object, package-xml."
+    description: "Output format. One of: json, csv, json-per-object, csv-per-object, package-xml (for field definitions), entity-json, entity-csv (for entity definitions)."
     required: true
     default: "json"
   output_dir:
@@ -16,6 +16,10 @@ inputs:
     default: "all"
   field_definition_fields:
     description: "Comma-separated FieldDefinition fields to select. Defaults to all supported fields."
+    required: false
+    default: ""
+  entity_definition_fields:
+    description: "Comma-separated EntityDefinition fields to select. Defaults to all supported fields. Only used when format is entity-json or entity-csv."
     required: false
     default: ""
   updated_within:
@@ -56,12 +60,21 @@ runs:
       run: echo "$SFDX_AUTH_URL" | npx sf org login sfdx-url --sfdx-url-file /dev/stdin --set-default
       working-directory: ${{ github.action_path }}
 
-    - name: Fetch FieldDefinitions
+    - name: Fetch FieldDefinitions or EntityDefinitions
       shell: bash
       env:
         SF_USERNAME: ${{ inputs.sf_username }}
         OUTPUT_DIR: ${{ github.workspace }}/${{ inputs.output_dir }}
         FIELD_DEFINITION_FIELDS: ${{ inputs.field_definition_fields }}
+        ENTITY_DEFINITION_FIELDS: ${{ inputs.entity_definition_fields }}
         UPDATED_WITHIN: ${{ inputs.updated_within }}
         METADATA_API_VERSION: ${{ inputs.metadata_api_version }}
-      run: node ${{ github.action_path }}/scripts/fetch-field-definitions.js ${{ inputs.format }} ${{ inputs.object_scope }}
+      run: |
+        FORMAT="${{ inputs.format }}"
+        SCOPE="${{ inputs.object_scope }}"
+        if [[ "$FORMAT" == entity-* ]]; then
+          ENTITY_FORMAT="${FORMAT#entity-}"
+          node ${{ github.action_path }}/scripts/fetch-entity-definitions.js "$ENTITY_FORMAT" "$SCOPE"
+        else
+          node ${{ github.action_path }}/scripts/fetch-field-definitions.js "$FORMAT" "$SCOPE"
+        fi
