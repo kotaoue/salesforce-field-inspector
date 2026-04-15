@@ -3,6 +3,16 @@ import { dirname, resolve } from 'node:path';
 
 const DEFAULT_METADATA_API_VERSION = '62.0';
 
+const ENTITY_CSV_FIELDS = [
+  'DurableId',
+  'QualifiedApiName',
+  'Label',
+  'PluralLabel',
+  'Description',
+  'DeveloperName',
+  'NamespacePrefix',
+];
+
 const CSV_FIELDS = [
   'Id',
   'DurableId',
@@ -135,6 +145,41 @@ export async function saveResultsAsCsvPerObject(data, outputDir) {
   }
 
   console.log(`Results saved to ${outputDir} (${byEntity.size} files)`);
+}
+
+/**
+ * Serialize EntityDefinition results to a JSON file.
+ * @param {{ instanceUrl: string, records: object[] }} data
+ * @param {string} outputFile - Absolute path to the destination file
+ */
+export async function saveEntityResults(data, outputFile) {
+  const output = {
+    fetchedAt: new Date().toISOString(),
+    instanceUrl: data.instanceUrl,
+    totalSize: data.records.length,
+    records: data.records,
+  };
+
+  await mkdir(dirname(outputFile), { recursive: true });
+  await writeFile(outputFile, JSON.stringify(output, null, 2), 'utf-8');
+  console.log(`Results saved to ${outputFile}`);
+}
+
+/**
+ * Serialize EntityDefinition results to a CSV file.
+ * @param {{ instanceUrl: string, records: object[] }} data
+ * @param {string} outputFile - Absolute path to the destination file
+ */
+export async function saveEntityResultsAsCsv(data, outputFile) {
+  const header = ENTITY_CSV_FIELDS.join(',');
+  const rows = data.records.map((record) =>
+    ENTITY_CSV_FIELDS.map((field) => escapeCsvValue(record[field])).join(',')
+  );
+  const csv = [header, ...rows].join('\r\n') + '\r\n';
+
+  await mkdir(dirname(outputFile), { recursive: true });
+  await writeFile(outputFile, csv, 'utf-8');
+  console.log(`Results saved to ${outputFile}`);
 }
 
 /**

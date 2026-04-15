@@ -4,6 +4,16 @@ const ENTITY_ID_PATTERN = /^[A-Za-z0-9_]+$/;
 const OBJECT_SCOPE_VALUES = new Set(['all', 'system', 'custom']);
 const DURATION_PATTERN = /^(\d+)\s*(weeks?|w|days?|d|hours?|h|mins?|minutes?)$/i;
 const FIELD_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/;
+const ALLOWED_ENTITY_DEFINITION_FIELDS = [
+  'DurableId',
+  'QualifiedApiName',
+  'Label',
+  'PluralLabel',
+  'Description',
+  'DeveloperName',
+  'NamespacePrefix',
+];
+const ALLOWED_ENTITY_DEFINITION_FIELD_SET = new Set(ALLOWED_ENTITY_DEFINITION_FIELDS);
 const ALLOWED_FIELD_DEFINITION_FIELDS = [
   'Id',
   'DurableId',
@@ -126,6 +136,43 @@ function normalizeFieldDefinitionFields(fields) {
     if (!ALLOWED_FIELD_DEFINITION_FIELD_SET.has(field)) {
       throw new Error(
         `Unsupported field name: ${field}. Allowed fields: ${ALLOWED_FIELD_DEFINITION_FIELDS.join(', ')}.`
+      );
+    }
+  }
+
+  // Deduplicate while preserving order.
+  return [...new Set(normalized)];
+}
+
+/**
+ * Validate and normalize requested EntityDefinition select fields.
+ * @param {string[] | undefined} fields
+ * @returns {string[]}
+ */
+function normalizeEntityDefinitionFields(fields) {
+  if (fields == null) {
+    return ALLOWED_ENTITY_DEFINITION_FIELDS;
+  }
+
+  if (!Array.isArray(fields)) {
+    throw new Error('entityDefinitionFields must be an array of field names.');
+  }
+
+  const normalized = fields
+    .map((field) => (typeof field === 'string' ? field.trim() : field))
+    .filter((field) => field !== '');
+
+  if (normalized.length === 0) {
+    throw new Error('entityDefinitionFields must include at least one field.');
+  }
+
+  for (const field of normalized) {
+    if (typeof field !== 'string' || !FIELD_NAME_PATTERN.test(field)) {
+      throw new Error(`Invalid field name: ${String(field)}.`);
+    }
+    if (!ALLOWED_ENTITY_DEFINITION_FIELD_SET.has(field)) {
+      throw new Error(
+        `Unsupported field name: ${field}. Allowed fields: ${ALLOWED_ENTITY_DEFINITION_FIELDS.join(', ')}.`
       );
     }
   }
@@ -260,6 +307,60 @@ export async function fetchFieldDefinitions(username, objectScope = 'all', field
   }
 
   console.log(`Fetched ${records.length} FieldDefinition records.`);
+
+  return { instanceUrl: connection.instanceUrl, records };
+}
+
+/**
+ * Query EntityDefinition records from the Tooling API.
+ * @param {string} username - Salesforce username to authenticate as
+ * @param {'all' | 'system' | 'custom'} [objectScope='all'] - Object filter scope
+ * @param {string[]} [entityDefinitionFields] - EntityDefinition select fields
+ * @param {string | null | undefined} [updatedWithin] - Optional duration string (e.g. "2days", "12hours", "30min") to
+ *   restrict results to entities whose LastModifiedDate falls within the specified window.
+ * @returns {{ instanceUrl: string, records: object[] }}
+ */
+export async function fetchEntityDefinitions(username, objectScope = 'all', entityDefinitionFields, updatedWithin) {
+  if (!OBJECT_SCOPE_VALUES.has(objectScope)) {
+    throw new Error(
+      `Invalid object scope: ${objectScope}. Use one of: all, system, custom.`
+    );
+  }
+  const selectFields = normalizeEntityDefinitionFields(entityDefinitionFields);
+
+  let sinceDateTime = null;
+  if (updatedWithin != null && updatedWithin !== '') {
+    const ms = parseDuration(updatedWithin);
+    sinceDateTime = new Date(Date.now() - ms);
+  }
+
+  const authInfo = await AuthInfo.create({ username });
+  const connection = await Connection.create({ authInfo });
+
+  console.log(`Connected to: ${connection.instanceUrl}`);
+  console.log(`Object scope: ${objectScope}`);
+  if (sinceDateTime) {
+    console.log(`Filtering objects modified since: ${sinceDateTime.toISOString()} (updatedWithin: ${updatedWithin})`);
+  }
+
+  const whereClause = buildEntityDefinitionWhereClause(objectScope, sinceDateTime);
+  const selectClause = selectFields.join(', ');
+  let records = [];
+  let result = await connection.tooling.query(
+    `SELECT ${selectClause} FROM EntityDefinition${whereClause} ORDER BY DurableId LIMIT 2000`
+  );
+  for (const record of result.records) {
+    records.push(record);
+  }
+
+  while (!result.done && result.nextRecordsUrl) {
+    result = await connection.tooling.queryMore(result.nextRecordsUrl);
+    for (const record of result.records) {
+      records.push(record);
+    }
+  }
+
+  console.log(`Fetched ${records.length} EntityDefinition records.`);
 
   return { instanceUrl: connection.instanceUrl, records };
 }

@@ -69,6 +69,45 @@ After generating `package.xml`, retrieve the corresponding metadata with the Sal
 sf project retrieve start --manifest docs/package.xml
 ```
 
+### Fetch EntityDefinition Records (Object Metadata)
+
+To fetch object-level metadata such as labels and descriptions, use the entity-definitions script:
+
+```bash
+# Output directory defaults to `docs/`.
+# You can override it with:
+export OUTPUT_DIR="./tmp/entity-definitions"
+
+# Fetch all EntityDefinition records as JSON or CSV:
+npm run fetch-entity-definitions:json
+npm run fetch-entity-definitions:csv
+
+# Optional: filter by object scope (all (default) | system | custom)
+npm run fetch-entity-definitions:json -- custom
+
+# Optional: select specific EntityDefinition fields (comma-separated)
+# Supported fields: DurableId, QualifiedApiName, Label, PluralLabel,
+#                   Description, DeveloperName, NamespacePrefix
+export ENTITY_DEFINITION_FIELDS="QualifiedApiName,Label,PluralLabel,Description"
+npm run fetch-entity-definitions:json
+
+# Optional: filter objects by last modified date
+export UPDATED_WITHIN="2days"
+npm run fetch-entity-definitions:json -- custom
+```
+
+The entity-definitions output includes the following fields by default:
+
+| Field | Description |
+|-------|-------------|
+| `QualifiedApiName` | API name of the object (e.g. `Account`) |
+| `Label` | Display label (e.g. `Account`) |
+| `PluralLabel` | Plural display label (e.g. `Accounts`) |
+| `Description` | Object description |
+| `DeveloperName` | Developer name |
+| `DurableId` | Durable identifier |
+| `NamespacePrefix` | Namespace prefix (for managed packages) |
+
 ## Tests
 
 ```bash
